@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
@@ -25,8 +26,24 @@ app.add_middleware(
     allow_origins=[settings.FRONTEND_BASE_URL, "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*", "X-API-Key"],
 )
+
+
+@app.middleware("http")
+async def api_key_middleware(request: Request, call_next):
+    # Skip auth for health check and OPTIONS preflight
+    if request.url.path == "/health/db" or request.method == "OPTIONS":
+        return await call_next(request)
+    # If API_KEY is configured, enforce it
+    if settings.API_KEY:
+        key = request.headers.get("X-API-Key", "")
+        if key != settings.API_KEY:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Invalid or missing API key"},
+            )
+    return await call_next(request)
 
 app.include_router(health.router)
 app.include_router(websites.router)
