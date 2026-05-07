@@ -49,3 +49,5 @@ app.include_router(health.router)
 app.include_router(websites.router)
 app.include_router(accounts.router)
 app.include_router(jobs.router)
+
+# api_key: enabled
