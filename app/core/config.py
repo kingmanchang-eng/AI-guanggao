@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     APP_ENV: str = "production"
     APP_BASE_URL: str = ""
     FRONTEND_BASE_URL: str = ""
+    API_KEY: str = ""
 
     SUPABASE_URL: str
     SUPABASE_SERVICE_ROLE_KEY: str
