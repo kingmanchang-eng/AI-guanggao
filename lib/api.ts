@@ -1,8 +1,12 @@
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL || ''
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY || ''
 
 async function req<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(API_KEY ? { 'X-API-Key': API_KEY } : {}),
+    },
     ...options,
   })
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
