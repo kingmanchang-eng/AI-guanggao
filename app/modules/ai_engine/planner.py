@@ -140,9 +140,34 @@ def _fetch_recent_performance(db, website_id: str, customer_id: str) -> dict:
 
 
 async def _call_ai(context: dict) -> dict | None:
+    if settings.AI_PROVIDER == "gemini":
+        return await _call_gemini(context)
     if settings.AI_PROVIDER == "openai":
         return await _call_openai(context)
     return None
+
+
+async def _call_gemini(context: dict) -> dict | None:
+    # Gemini OpenAI-compatible endpoint
+    url = f"https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {settings.AI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": settings.AI_MODEL,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
+        ],
+        "response_format": {"type": "json_object"},
+        "temperature": 0.3,
+    }
+    async with httpx.AsyncClient(timeout=settings.AI_REQUEST_TIMEOUT_SECONDS) as client:
+        resp = await client.post(url, headers=headers, json=payload)
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
+        return json.loads(content)
 
 
 async def _call_openai(context: dict) -> dict | None:
