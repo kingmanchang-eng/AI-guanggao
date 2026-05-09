@@ -258,6 +258,15 @@ def _fetch_recent_performance(db, website_id: str, customer_id: str) -> dict:
         .limit(90)
         .execute()
     )
+    ad_groups = (
+        db.table("ad_group_snapshots")
+        .select("campaign_id, ad_group_id, ad_group_name, date, metrics_json")
+        .eq("website_id", website_id)
+        .eq("customer_id", customer_id)
+        .order("date", desc=True)
+        .limit(200)
+        .execute()
+    )
     keywords = (
         db.table("keyword_snapshots")
         .select("keyword_text, match_type, date, metrics_json")
@@ -277,6 +286,7 @@ def _fetch_recent_performance(db, website_id: str, customer_id: str) -> dict:
     )
     return {
         "campaigns": campaigns.data,
+        "ad_groups": ad_groups.data,
         "keywords": keywords.data,
         "search_terms": search_terms.data,
     }

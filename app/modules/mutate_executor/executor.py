@@ -48,13 +48,14 @@ async def execute_pending_actions(website_id: str):
             _write_mutate_log(db, action, None, False, reason, validate_only=False)
             continue
 
+        is_validate_only = settings.ENABLE_VALIDATE_ONLY and not settings.ENABLE_PRODUCTION_MUTATE
         success, response, error = await _call_google_ads_mutate(action, binding)
         status = "executed" if success else "failed"
         db.table("ai_actions").update({
             "status": status,
             "executed_at": datetime.now(timezone.utc).isoformat(),
         }).eq("id", action["id"]).execute()
-        _write_mutate_log(db, action, response, success, error)
+        _write_mutate_log(db, action, response, success, error, validate_only=is_validate_only)
 
         if not success:
             _increment_api_failure(db, website_id, binding["manager_account_id"], customer_id)
