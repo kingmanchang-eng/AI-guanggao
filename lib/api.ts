@@ -23,7 +23,9 @@ export const api = {
 
   // Accounts
   listManagers: () => req<any[]>('/api/accounts/managers'),
+  createManager: (data: any) => req('/api/accounts/managers', { method: 'POST', body: JSON.stringify(data) }),
   listAdsAccounts: () => req<any[]>('/api/accounts/ads'),
+  createAdsAccount: (data: any) => req('/api/accounts/ads', { method: 'POST', body: JSON.stringify(data) }),
   listBindings: () => req<any[]>('/api/accounts/bindings'),
   createBinding: (data: any) => req('/api/accounts/bindings', { method: 'POST', body: JSON.stringify(data) }),
   toggleAutopilot: (id: string, enabled: boolean) =>
@@ -34,6 +36,7 @@ export const api = {
   listActions: (websiteId: string, status?: string) =>
     req<any[]>(`/api/jobs/actions/${websiteId}${status ? `?status=${status}` : ''}`),
   listMutateLogs: (websiteId: string) => req<any[]>(`/api/jobs/logs/${websiteId}`),
+  triggerSync: (websiteId: string) => req(`/api/jobs/sync/${websiteId}`, { method: 'POST' }),
   triggerOptimize: (websiteId: string) => req(`/api/jobs/optimize/${websiteId}`, { method: 'POST' }),
   triggerExecute: (websiteId: string) => req(`/api/jobs/execute/${websiteId}`, { method: 'POST' }),
 }
