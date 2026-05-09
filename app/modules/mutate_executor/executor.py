@@ -61,12 +61,16 @@ async def execute_pending_actions(website_id: str):
 
 
 async def _call_google_ads_mutate(action: dict, binding: dict) -> tuple[bool, dict | None, str | None]:
+    # validate_only 模式：跳过真实 API 调用，直接返回成功
     if settings.ENABLE_VALIDATE_ONLY and not settings.ENABLE_PRODUCTION_MUTATE:
         return True, {"validate_only": True}, None
 
-    # Google Ads API mutate implementation goes here
-    # This will be filled in when Google Ads credentials are configured
-    return False, None, "Google Ads API not yet configured"
+    from app.modules.google_ads.client import is_google_ads_configured
+    if not is_google_ads_configured():
+        return False, None, "Google Ads API 凭据未配置"
+
+    from app.modules.google_ads.mutate import execute_action
+    return execute_action(action, binding)
 
 
 def _write_mutate_log(db, action: dict, response: dict | None, success: bool, error: str | None, validate_only: bool = False):

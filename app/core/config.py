@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     GOOGLE_ADS_DEVELOPER_TOKEN: str = ""
     GOOGLE_ADS_CLIENT_ID: str = ""
     GOOGLE_ADS_CLIENT_SECRET: str = ""
+    GOOGLE_ADS_REFRESH_TOKEN: str = ""
+    GOOGLE_ADS_LOGIN_CUSTOMER_ID: str = ""
     GOOGLE_ADS_USE_PROTO_PLUS: bool = True
 
     AI_PROVIDER: str = "openai"
