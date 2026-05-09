@@ -28,6 +28,7 @@ def sync_website_data(website_id: str, customer_id: str,
     date_range = f"segments.date BETWEEN '{start_date}' AND '{end_date}'"
 
     _sync_campaigns(client, cid, website_id, manager_account_id, customer_id, date_range)
+    _sync_ad_groups(client, cid, website_id, manager_account_id, customer_id, date_range)
     _sync_keywords(client, cid, website_id, manager_account_id, customer_id, date_range)
     _sync_search_terms(client, cid, website_id, manager_account_id, customer_id, date_range)
 
@@ -88,6 +89,67 @@ def _sync_campaigns(client, cid, website_id, manager_account_id, customer_id, da
     if rows:
         db.table("campaign_snapshots").upsert(rows, on_conflict="website_id,customer_id,campaign_id,date").execute()
         logger.info(f"Campaign 快照写入 {len(rows)} 条")
+
+
+def _sync_ad_groups(client, cid, website_id, manager_account_id, customer_id, date_range):
+    db = get_client()
+    ga_service = client.get_service("GoogleAdsService")
+
+    query = f"""
+        SELECT
+            campaign.id,
+            ad_group.id,
+            ad_group.name,
+            ad_group.status,
+            ad_group.type,
+            segments.date,
+            metrics.impressions,
+            metrics.clicks,
+            metrics.cost_micros,
+            metrics.conversions,
+            metrics.ctr,
+            metrics.average_cpc
+        FROM ad_group
+        WHERE {date_range}
+          AND ad_group.status != 'REMOVED'
+        ORDER BY segments.date DESC
+        LIMIT 1000
+    """
+
+    rows = []
+    try:
+        response = ga_service.search(customer_id=cid, query=query)
+        for row in response:
+            rows.append({
+                "website_id": website_id,
+                "manager_account_id": manager_account_id,
+                "customer_id": customer_id,
+                "campaign_id": str(row.campaign.id),
+                "ad_group_id": str(row.ad_group.id),
+                "ad_group_name": row.ad_group.name,
+                "date": row.segments.date,
+                "metrics_json": {
+                    "impressions": row.metrics.impressions,
+                    "clicks": row.metrics.clicks,
+                    "cost_micros": row.metrics.cost_micros,
+                    "cost_usd": round(row.metrics.cost_micros / 1_000_000, 4),
+                    "conversions": row.metrics.conversions,
+                    "ctr": round(row.metrics.ctr, 6),
+                    "average_cpc_micros": row.metrics.average_cpc,
+                    "ad_group_status": row.ad_group.status.name,
+                    "ad_group_type": row.ad_group.type_.name,
+                },
+            })
+    except Exception as e:
+        logger.error(f"AdGroup 同步失败 customer={cid}: {e}")
+        return
+
+    if rows:
+        db.table("ad_group_snapshots").upsert(
+            rows,
+            on_conflict="website_id,customer_id,campaign_id,ad_group_id,date"
+        ).execute()
+        logger.info(f"AdGroup 快照写入 {len(rows)} 条")
 
 
 def _sync_keywords(client, cid, website_id, manager_account_id, customer_id, date_range):

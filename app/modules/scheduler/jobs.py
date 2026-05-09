@@ -1,7 +1,7 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from app.db.supabase_client import get_client
-from app.modules.ai_engine.planner import run_optimization_plan
+from app.modules.ai_engine.planner import run_optimization_plan, run_structure_optimization_plan
 from app.modules.mutate_executor.executor import execute_pending_actions
 from app.modules.google_ads.sync import sync_website_data
 from app.modules.google_ads.client import is_google_ads_configured
@@ -20,6 +20,13 @@ def start_scheduler():
     scheduler.add_job(job_daily_execute, CronTrigger(hour=4, minute=0), id="daily_execute", replace_existing=True)
     # 每小时安全检查
     scheduler.add_job(job_safety_check, CronTrigger(hour="*/1"), id="safety_check", replace_existing=True)
+    # 每周一 02:00 执行账户结构优化（新建 Campaign / AdGroup / 定向调整）
+    scheduler.add_job(
+        job_weekly_structure_optimize,
+        CronTrigger(day_of_week="mon", hour=2, minute=0),
+        id="weekly_structure_optimize",
+        replace_existing=True,
+    )
     scheduler.start()
     logger.info("Scheduler started")
 
@@ -84,6 +91,24 @@ async def job_daily_execute():
             await execute_pending_actions(b["website_id"])
         except Exception as e:
             logger.error(f"Execute failed for website {b['website_id']}: {e}")
+
+
+async def job_weekly_structure_optimize():
+    """每周一结构优化：新建Campaign/AdGroup、调整地理&语言定向"""
+    db = get_client()
+    bindings = (
+        db.table("website_ads_account_bindings")
+        .select("website_id")
+        .eq("ai_autopilot_enabled", True)
+        .eq("status", "active")
+        .eq("safety_paused", False)
+        .execute()
+    )
+    for b in bindings.data:
+        try:
+            await run_structure_optimization_plan(b["website_id"])
+        except Exception as e:
+            logger.error(f"Weekly structure optimize failed for website {b['website_id']}: {e}")
 
 
 async def job_safety_check():

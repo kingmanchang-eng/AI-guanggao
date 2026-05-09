@@ -33,6 +33,11 @@ def execute_action(action: dict, binding: dict) -> tuple[bool, dict | None, str 
         "ADD_NEGATIVE_KEYWORD": _add_negative_keyword,
         "PAUSE_AD": _pause_ad,
         "CREATE_RESPONSIVE_SEARCH_AD": _create_responsive_search_ad,
+        "CREATE_CAMPAIGN_BUDGET": _create_campaign_budget,
+        "CREATE_CAMPAIGN": _create_campaign,
+        "CREATE_AD_GROUP": _create_ad_group,
+        "UPDATE_LOCATION_TARGETING": _update_location_targeting,
+        "UPDATE_LANGUAGE_TARGETING": _update_language_targeting,
     }
 
     handler = handlers.get(action_type)
@@ -208,6 +213,181 @@ def _pause_ad(client, customer_id: str, payload: dict) -> dict:
         customer_id=customer_id, operations=[op]
     )
     return {"resource_name": result.results[0].resource_name, "status": "PAUSED"}
+
+
+def _create_campaign_budget(client, customer_id: str, payload: dict) -> dict:
+    """创建独立预算（供新建广告系列使用）"""
+    campaign_budget_service = client.get_service("CampaignBudgetService")
+
+    op = client.get_type("CampaignBudgetOperation")
+    budget = op.create
+    budget.name = payload["budget_name"]
+    budget.amount_micros = int(float(payload["amount_usd"]) * 1_000_000)
+    budget.delivery_method = client.enums.BudgetDeliveryMethodEnum[
+        payload.get("delivery_method", "STANDARD")
+    ]
+    budget.explicitly_shared = payload.get("explicitly_shared", True)
+
+    result = campaign_budget_service.mutate_campaign_budgets(
+        customer_id=customer_id, operations=[op]
+    )
+    return {
+        "resource_name": result.results[0].resource_name,
+        "budget_name": payload["budget_name"],
+        "amount_usd": payload["amount_usd"],
+    }
+
+
+def _create_campaign(client, customer_id: str, payload: dict) -> dict:
+    """创建新广告系列（默认搜索网络，PAUSED 状态）"""
+    campaign_service = client.get_service("CampaignService")
+
+    op = client.get_type("CampaignOperation")
+    campaign = op.create
+    campaign.name = payload["campaign_name"]
+    campaign.status = client.enums.CampaignStatusEnum[payload.get("status", "PAUSED")]
+    campaign.advertising_channel_type = client.enums.AdvertisingChannelTypeEnum[
+        payload.get("advertising_channel_type", "SEARCH")
+    ]
+    campaign.campaign_budget = payload["budget_resource_name"]
+
+    bidding = payload.get("bidding_strategy", "MANUAL_CPC")
+    if bidding == "MANUAL_CPC":
+        campaign.manual_cpc.enhanced_cpc_enabled = payload.get("enhanced_cpc", False)
+    elif bidding == "TARGET_CPA":
+        campaign.target_cpa.target_cpa_micros = int(float(payload["target_cpa_usd"]) * 1_000_000)
+    elif bidding == "TARGET_ROAS":
+        campaign.target_roas.target_roas = float(payload["target_roas"])
+    elif bidding == "MAXIMIZE_CONVERSIONS":
+        if payload.get("target_cpa_usd"):
+            campaign.maximize_conversions.target_cpa_micros = int(float(payload["target_cpa_usd"]) * 1_000_000)
+
+    campaign.network_settings.target_google_search = payload.get("target_google_search", True)
+    campaign.network_settings.target_search_network = payload.get("target_search_network", True)
+    campaign.network_settings.target_content_network = payload.get("target_content_network", False)
+
+    result = campaign_service.mutate_campaigns(
+        customer_id=customer_id, operations=[op]
+    )
+    return {
+        "resource_name": result.results[0].resource_name,
+        "campaign_name": payload["campaign_name"],
+        "status": payload.get("status", "PAUSED"),
+    }
+
+
+def _create_ad_group(client, customer_id: str, payload: dict) -> dict:
+    """在指定广告系列下创建广告组"""
+    ad_group_service = client.get_service("AdGroupService")
+    campaign_service = client.get_service("CampaignService")
+
+    op = client.get_type("AdGroupOperation")
+    ag = op.create
+    ag.name = payload["ad_group_name"]
+    ag.campaign = campaign_service.campaign_path(customer_id, str(payload["campaign_id"]))
+    ag.status = client.enums.AdGroupStatusEnum[payload.get("status", "ENABLED")]
+    ag.type_ = client.enums.AdGroupTypeEnum[payload.get("ad_group_type", "SEARCH_STANDARD")]
+
+    if "cpc_bid_usd" in payload:
+        ag.cpc_bid_micros = int(float(payload["cpc_bid_usd"]) * 1_000_000)
+    elif "cpc_bid_micros" in payload:
+        ag.cpc_bid_micros = int(payload["cpc_bid_micros"])
+
+    result = ad_group_service.mutate_ad_groups(
+        customer_id=customer_id, operations=[op]
+    )
+    return {
+        "resource_name": result.results[0].resource_name,
+        "ad_group_name": payload["ad_group_name"],
+        "campaign_id": str(payload["campaign_id"]),
+    }
+
+
+def _update_location_targeting(client, customer_id: str, payload: dict) -> dict:
+    """更新广告系列地理位置定向，支持 replace_existing 先清空再添加"""
+    campaign_criterion_service = client.get_service("CampaignCriterionService")
+    campaign_service = client.get_service("CampaignService")
+    ga_service = client.get_service("GoogleAdsService")
+
+    campaign_id = str(payload["campaign_id"])
+    campaign_resource = campaign_service.campaign_path(customer_id, campaign_id)
+    ops = []
+
+    if payload.get("replace_existing", False):
+        query = f"""
+            SELECT campaign_criterion.resource_name
+            FROM campaign_criterion
+            WHERE campaign_criterion.campaign = '{campaign_resource}'
+              AND campaign_criterion.type = 'LOCATION'
+        """
+        response = ga_service.search(customer_id=customer_id, query=query)
+        for row in response:
+            remove_op = client.get_type("CampaignCriterionOperation")
+            remove_op.remove = row.campaign_criterion.resource_name
+            ops.append(remove_op)
+
+    geo_svc = client.get_service("GeoTargetConstantService")
+    negative = payload.get("negative", False)
+    for geo_id in payload.get("geo_target_ids", []):
+        add_op = client.get_type("CampaignCriterionOperation")
+        criterion = add_op.create
+        criterion.campaign = campaign_resource
+        criterion.location.geo_target_constant = geo_svc.geo_target_constant_path(str(geo_id))
+        criterion.negative = negative
+        ops.append(add_op)
+
+    if ops:
+        campaign_criterion_service.mutate_campaign_criteria(
+            customer_id=customer_id, operations=ops
+        )
+
+    return {
+        "campaign_id": campaign_id,
+        "added": len(payload.get("geo_target_ids", [])),
+        "replaced_existing": payload.get("replace_existing", False),
+    }
+
+
+def _update_language_targeting(client, customer_id: str, payload: dict) -> dict:
+    """更新广告系列语言定向，language_ids 为 Google Ads 语言常量 ID（如 1000=zh_CN, 1017=en）"""
+    campaign_criterion_service = client.get_service("CampaignCriterionService")
+    campaign_service = client.get_service("CampaignService")
+    ga_service = client.get_service("GoogleAdsService")
+
+    campaign_id = str(payload["campaign_id"])
+    campaign_resource = campaign_service.campaign_path(customer_id, campaign_id)
+    ops = []
+
+    if payload.get("replace_existing", False):
+        query = f"""
+            SELECT campaign_criterion.resource_name
+            FROM campaign_criterion
+            WHERE campaign_criterion.campaign = '{campaign_resource}'
+              AND campaign_criterion.type = 'LANGUAGE'
+        """
+        response = ga_service.search(customer_id=customer_id, query=query)
+        for row in response:
+            remove_op = client.get_type("CampaignCriterionOperation")
+            remove_op.remove = row.campaign_criterion.resource_name
+            ops.append(remove_op)
+
+    for lang_id in payload.get("language_ids", []):
+        add_op = client.get_type("CampaignCriterionOperation")
+        criterion = add_op.create
+        criterion.campaign = campaign_resource
+        criterion.language.language_constant = f"languageConstants/{lang_id}"
+        ops.append(add_op)
+
+    if ops:
+        campaign_criterion_service.mutate_campaign_criteria(
+            customer_id=customer_id, operations=ops
+        )
+
+    return {
+        "campaign_id": campaign_id,
+        "added": len(payload.get("language_ids", [])),
+        "replaced_existing": payload.get("replace_existing", False),
+    }
 
 
 def _create_responsive_search_ad(client, customer_id: str, payload: dict) -> dict:
