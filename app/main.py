@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
-from app.routers import health, websites, accounts, jobs
+from app.routers import health, websites, accounts, jobs, campaigns
 from app.modules.scheduler.jobs import start_scheduler
 
 
@@ -49,5 +49,6 @@ app.include_router(health.router)
 app.include_router(websites.router)
 app.include_router(accounts.router)
 app.include_router(jobs.router)
+app.include_router(campaigns.router)
 
 # api_key: enabled
