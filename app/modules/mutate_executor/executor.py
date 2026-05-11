@@ -25,6 +25,16 @@ async def execute_pending_actions(website_id: str):
     customer_id = binding["customer_id"]
     max_actions = binding.get("max_actions_per_day", settings.DEFAULT_SITE_DAILY_ACTION_LIMIT)
 
+    # 从 manager_accounts 取真实的 Google Ads login_customer_id（非 Supabase UUID）
+    mgr = (
+        db.table("manager_accounts")
+        .select("login_customer_id")
+        .eq("id", binding["manager_account_id"])
+        .single()
+        .execute()
+    )
+    binding["login_customer_id"] = mgr.data["login_customer_id"] if mgr.data else ""
+
     limit_ok, limit_msg = check_daily_limits(website_id, customer_id, max_actions)
     if not limit_ok:
         _log_safety_event(db, website_id, binding["manager_account_id"], customer_id, "DAILY_LIMIT_REACHED", limit_msg)
