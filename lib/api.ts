@@ -39,4 +39,23 @@ export const api = {
   triggerSync: (websiteId: string) => req(`/api/jobs/sync/${websiteId}`, { method: 'POST' }),
   triggerOptimize: (websiteId: string) => req(`/api/jobs/optimize/${websiteId}`, { method: 'POST' }),
   triggerExecute: (websiteId: string) => req(`/api/jobs/execute/${websiteId}`, { method: 'POST' }),
+
+  // Campaign creation from landing page
+  previewCampaign: (data: {
+    website_id: string
+    landing_page_url: string
+    campaign_name?: string
+    daily_budget_usd?: number
+    bidding_strategy?: string
+    start_paused?: boolean
+  }) => req<any>('/api/campaigns/preview', { method: 'POST', body: JSON.stringify(data) }),
+
+  createCampaign: (data: {
+    website_id: string
+    landing_page_url: string
+    campaign_name?: string
+    daily_budget_usd?: number
+    bidding_strategy?: string
+    start_paused?: boolean
+  }) => req<any>('/api/campaigns/create', { method: 'POST', body: JSON.stringify(data) }),
 }

@@ -6,6 +6,7 @@ const nav = [
   { href: '/', label: '概览', icon: '📊' },
   { href: '/websites', label: '网站管理', icon: '🌐' },
   { href: '/accounts', label: '广告账号', icon: '📋' },
+  { href: '/campaigns', label: '创建广告', icon: '✨' },
   { href: '/logs', label: '操作日志', icon: '📝' },
   { href: '/safety', label: '异常中心', icon: '🛡️' },
 ]
