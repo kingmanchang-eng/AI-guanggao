@@ -34,6 +34,7 @@ def execute_action(action: dict, binding: dict) -> tuple[bool, dict | None, str 
         "PAUSE_AD": _pause_ad,
         "CREATE_RESPONSIVE_SEARCH_AD": _create_responsive_search_ad,
         "CREATE_CAMPAIGN_BUDGET": _create_campaign_budget,
+        "CREATE_SEARCH_CAMPAIGN": _create_campaign,
         "CREATE_CAMPAIGN": _create_campaign,
         "CREATE_AD_GROUP": _create_ad_group,
         "UPDATE_LOCATION_TARGETING": _update_location_targeting,
